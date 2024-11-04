@@ -5,7 +5,9 @@ import random
 from datetime import datetime, timedelta
 from fastapi import FastAPI, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
+import logging
 
+logging.basicConfig(level=logging.INFO) 
 
 app = FastAPI()
 
@@ -16,6 +18,19 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# @app.get("/info")
+# def info():
+#     return {
+#         "websocket_endpoint": "/ws/candlestick-data",
+#         "data_structure": {
+#             "time": "ISO 8601 timestamp",
+#             "open": "float",
+#             "high": "float",
+#             "low": "float",
+#             "close": "float"
+#         }
+#     }
 
 # Initialize starting data for the candlestick
 starting_price = 100.0  # Arbitrary starting price
@@ -53,7 +68,9 @@ async def websocket_endpoint(websocket: WebSocket):
             # Move to the next time interval (e.g., 1 minute)
             current_time += timedelta(minutes=1)
             await asyncio.sleep(1)  # Send data every second for demonstration
+            logging.info("Sent candlestick data: %s", candlestick_data)
     except Exception as e:
-        print(f"Error: {e}")
+        logging.error(f"Connection error: {e}")
     finally:
         await websocket.close()
+        logging.info("Connection closed")
