@@ -8,6 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 import aiohttp
 from config import API_KEYS, SUPPORTED_SYMBOLS, SUPPORTED_CRYPTO
 from services.alpha_vantage import AlphaVantageService
+from services.finnhub_service import FinnhubService
 from typing import Optional
 
 app = FastAPI()
@@ -103,6 +104,7 @@ async def market_data_stream(websocket: WebSocket):
 @app.on_event("startup")
 async def startup_event():
     app.state.alpha_vantage = AlphaVantageService()
+    app.state.finnhub = FinnhubService()
 
 @app.get("/api/stock/{symbol}")
 async def get_stock_data(symbol: str, interval: str = "5min"):
@@ -190,7 +192,8 @@ async def search_stocks(
 
 @app.on_event("shutdown")
 async def shutdown_event():
-    await app.state.alpha_vantage.cleanup()
+    await app.state.alpha_vantage.close_session()
+    await app.state.finnhub.close_session()
 
 @app.get("/api/stocks")
 async def get_stocks(
@@ -256,5 +259,56 @@ async def get_intraday_data(
         raise HTTPException(
             status_code=500,
             detail="Failed to fetch intraday data"
+        )
+
+@app.get("/api/news/market")
+async def get_market_news(
+    category: str = Query(
+        default="general",
+        enum=["general", "forex", "crypto", "merger"]
+    )
+):
+    """Get market news by category"""
+    try:
+        news = await app.state.finnhub.get_market_news(category)
+        return {
+            "category": category,
+            "count": len(news),
+            "news": news
+        }
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail="Failed to fetch market news")
+
+@app.get("/api/news/company/{symbol}")
+async def get_company_news(
+    symbol: str,
+    days: int = Query(default=7, ge=1, le=30)
+):
+    """Get company specific news for the last X days"""
+    try:
+        to_date = datetime.now().strftime("%Y-%m-%d")
+        from_date = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
+        
+        news = await app.state.finnhub.get_company_news(
+            symbol,
+            from_date,
+            to_date
+        )
+        
+        return {
+            "symbol": symbol,
+            "from_date": from_date,
+            "to_date": to_date,
+            "count": len(news),
+            "news": news
+        }
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to fetch company news: {str(e)}"
         )
 
