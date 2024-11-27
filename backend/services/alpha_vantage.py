@@ -18,7 +18,13 @@ class AlphaVantageService:
     def __init__(self):
         self.api_key = API_KEYS["alpha_vantage"]
         self.session = None
-    
+       
+    async def close_session(self):
+        """Close the aiohttp client session"""
+        if self.session:
+            await self.session.close()
+            self.session = None
+
     async def get_daily_data(self, symbol: str) -> Dict:
         """Fetch daily stock data using aiohttp"""
         if not self.session:
