@@ -9,3 +9,6 @@ __pycache__/
 # Ignore IDE or editor settings
 .vscode/
 .idea/
+
+# Ignore API keys
+config.py

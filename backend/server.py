@@ -3,8 +3,11 @@ import asyncio
 import json
 import random
 from datetime import datetime, timedelta
-from fastapi import FastAPI, WebSocket
+from fastapi import FastAPI, WebSocket, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
+import aiohttp
+from config import API_KEYS, SUPPORTED_SYMBOLS, SUPPORTED_CRYPTO
+from services.alpha_vantage import AlphaVantageService
 
 app = FastAPI()
 
@@ -20,6 +23,33 @@ app.add_middleware(
 starting_price = 100.0  # Arbitrary starting price
 last_price = starting_price
 current_time = datetime.utcnow()
+
+class MarketDataManager:
+    def __init__(self):
+        self.clients = []
+        self.finnhub_ws = None
+        self.alpha_vantage_session = None
+    
+    async def connect_client(self, websocket: WebSocket):
+        await websocket.accept()
+        self.clients.append(websocket)
+    
+    async def disconnect_client(self, websocket: WebSocket):
+        self.clients.remove(websocket)
+        await websocket.close()
+    
+    async def broadcast(self, message: dict):
+        dead_clients = []
+        for client in self.clients:
+            try:
+                await client.send_json(message)
+            except:
+                dead_clients.append(client)
+        
+        for client in dead_clients:
+            self.clients.remove(client)
+
+market_manager = MarketDataManager()
 
 # WebSocket endpoint for streaming candlestick data
 @app.websocket("/ws/candlestick-data")
@@ -55,3 +85,98 @@ async def websocket_endpoint(websocket: WebSocket):
         print(f"Error: {e}")
     finally:
         await websocket.close()
+
+@app.websocket("/ws/market-data")
+async def market_data_stream(websocket: WebSocket):
+    await market_manager.connect_client(websocket)
+    try:
+        while True:
+            data = await websocket.receive_text()
+            # Handle any client messages if needed
+            await asyncio.sleep(1)
+    except Exception as e:
+        print(f"Error: {e}")
+    finally:
+        await market_manager.disconnect_client(websocket)
+
+@app.on_event("startup")
+async def startup_event():
+    app.state.alpha_vantage = AlphaVantageService()
+
+@app.get("/api/stock/{symbol}")
+async def get_stock_data(symbol: str, interval: str = "5min"):
+    try:
+        if not symbol:
+            raise HTTPException(status_code=400, detail="Symbol is required")
+            
+        if interval not in ["1min", "5min", "15min", "30min", "60min"]:
+            raise HTTPException(status_code=400, detail="Invalid interval")
+            
+        data = await app.state.alpha_vantage.get_stock_data(symbol, interval)
+        if not data:
+            raise HTTPException(
+                status_code=404,
+                detail=f"No data found for symbol {symbol}"
+            )
+        return data
+        
+    except HTTPException as e:
+        raise e
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        print(f"Unexpected error: {str(e)}")  # Add logging
+        raise HTTPException(
+            status_code=500,
+            detail="Internal server error"
+        )
+
+@app.get("/api/stock/{symbol}/daily")
+async def get_daily_stock_data(symbol: str):
+    try:
+        if not symbol:
+            raise HTTPException(status_code=400, detail="Symbol is required")
+        
+        # Add await here since the method is async
+        data = await app.state.alpha_vantage.get_daily_data(symbol)
+        if not data or not data.get("data"):
+            raise HTTPException(
+                status_code=404,
+                detail=f"No daily data found for symbol {symbol}"
+            )
+        return data
+        
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        print(f"Error fetching daily data for {symbol}: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to fetch stock data"
+        )
+
+@app.get("/api/search")
+async def search_stocks(query: str):
+    try:
+        if not query:
+            raise HTTPException(status_code=400, detail="Search query is required")
+            
+        # Since we're using synchronous requests now, we don't need to await
+        data = app.state.alpha_vantage.search_symbols(query)
+        return data
+        
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        print(f"Error searching stocks: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to search stocks"
+        )
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    await app.state.alpha_vantage.cleanup()
+
