@@ -8,6 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 import aiohttp
 from config import API_KEYS, SUPPORTED_SYMBOLS, SUPPORTED_CRYPTO
 from services.alpha_vantage import AlphaVantageService
+from typing import Optional
 
 app = FastAPI()
 
@@ -158,14 +159,25 @@ async def get_daily_stock_data(symbol: str):
         )
 
 @app.get("/api/search")
-async def search_stocks(query: str):
+async def search_stocks(
+    query: str = Query(..., description="Search query for stock symbols"),
+    limit: int = Query(default=10, ge=1, le=100)
+):
+    """Search for stocks by name or symbol"""
     try:
         if not query:
             raise HTTPException(status_code=400, detail="Search query is required")
             
-        # Since we're using synchronous requests now, we don't need to await
-        data = app.state.alpha_vantage.search_symbols(query)
-        return data
+        results = await app.state.alpha_vantage.search_symbols(query)
+        
+        # Apply limit
+        results = results[:limit]
+        
+        return {
+            "query": query,
+            "count": len(results),
+            "results": results
+        }
         
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -179,4 +191,45 @@ async def search_stocks(query: str):
 @app.on_event("shutdown")
 async def shutdown_event():
     await app.state.alpha_vantage.cleanup()
+
+@app.get("/api/stocks")
+async def get_stocks(
+    limit: int = Query(default=100, ge=1, le=1000),
+    offset: int = Query(default=0, ge=0),
+    exchange: Optional[str] = Query(default=None),
+    status: Optional[str] = Query(default="active")
+):
+    """Get list of available stocks with pagination and filtering"""
+    try:
+        data = await app.state.alpha_vantage.get_stock_listings()
+        stocks = data["stocks"]
+        
+        # Apply filters
+        if exchange:
+            stocks = [s for s in stocks if s["exchange"].lower() == exchange.lower()]
+        if status:
+            stocks = [s for s in stocks if s["status"].lower() == status.lower()]
+            
+        # Calculate total before pagination
+        total = len(stocks)
+        
+        # Apply pagination
+        stocks = stocks[offset:offset + limit]
+        
+        return {
+            "total": total,
+            "count": len(stocks),
+            "offset": offset,
+            "limit": limit,
+            "stocks": stocks
+        }
+        
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        print(f"Error getting stock listings: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to fetch stock listings"
+        )
 

@@ -75,42 +75,89 @@ class AlphaVantageService:
             )
     
     async def search_symbols(self, keywords: str) -> List[Dict]:
-        """Search for stock symbols using synchronous requests"""
+        """Search for stock symbols using Alpha Vantage's SYMBOL_SEARCH endpoint"""
+        if not self.session:
+            self.session = ClientSession()
+
         try:
-            response = requests.get(
-                f"{self.BASE_URL}",
-                params={
-                    "function": "SYMBOL_SEARCH",
-                    "keywords": keywords,
-                    "apikey": self.api_key
-                }
-            )
+            params = {
+                "function": "SYMBOL_SEARCH",
+                "keywords": keywords,
+                "apikey": self.api_key
+            }
             
-            data = response.json()
-            
-            if "Error Message" in data:
-                raise ValueError(data["Error Message"])
+            async with self.session.get(self.BASE_URL, params=params, ssl=False) as response:
+                data = await response.json()
                 
-            matches = data.get("bestMatches", [])
-            
-            return [
-                {
-                    "symbol": match.get("1. symbol"),
-                    "name": match.get("2. name"),
-                    "type": match.get("3. type"),
-                    "region": match.get("4. region"),
-                    "currency": match.get("8. currency")
-                }
-                for match in matches
-            ]
-            
-        except requests.RequestException as e:
+                if "Error Message" in data:
+                    raise ValueError(data["Error Message"])
+                
+                matches = data.get("bestMatches", [])
+                
+                return [
+                    {
+                        "symbol": match.get("1. symbol"),
+                        "name": match.get("2. name"),
+                        "type": match.get("3. type"),
+                        "region": match.get("4. region"),
+                        "marketOpen": match.get("5. marketOpen"),
+                        "marketClose": match.get("6. marketClose"),
+                        "timezone": match.get("7. timezone"),
+                        "currency": match.get("8. currency"),
+                        "matchScore": match.get("9. matchScore")
+                    }
+                    for match in matches
+                ]
+                
+        except Exception as e:
+            print(f"Error searching symbols: {str(e)}")
             raise HTTPException(
                 status_code=500,
-                detail=f"Failed to fetch data from Alpha Vantage"
+                detail=f"Failed to search symbols: {str(e)}"
             )
     
     async def cleanup(self):
         if self.session:
             await self.session.close()
             self.session = None
+    
+    async def get_stock_listings(self) -> Dict:
+        """Fetch list of active stocks from Alpha Vantage"""
+        if not self.session:
+            self.session = ClientSession()
+        
+        try:
+            params = {
+                "function": "LISTING_STATUS",
+                "apikey": self.api_key
+            }
+            
+            async with self.session.get(self.BASE_URL, params=params, ssl=False) as response:
+                data = await response.json()
+                
+                if "Error Message" in data:
+                    raise ValueError(data["Error Message"])
+                
+                # Format the response to include only relevant fields
+                stocks = [
+                    {
+                        "symbol": item["symbol"],
+                        "name": item["name"],
+                        "exchange": item["exchange"],
+                        "assetType": item["assetType"],
+                        "status": item["status"]
+                    }
+                    for item in data
+                ]
+                
+                return {
+                    "count": len(stocks),
+                    "stocks": stocks
+                }
+                
+        except Exception as e:
+            print(f"Error fetching stock listings: {str(e)}")
+            raise HTTPException(
+                status_code=500,
+                detail=f"Failed to fetch stock listings: {str(e)}"
+            )
