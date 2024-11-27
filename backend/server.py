@@ -29,16 +29,27 @@ current_time = datetime.utcnow()
 class MarketDataManager:
     def __init__(self):
         self.clients = []
-        self.finnhub_ws = None
-        self.alpha_vantage_session = None
+        self.subscribed_symbols = set()
+    
+    async def handle_finnhub_message(self, message: dict):
+        """Handle incoming Finnhub WebSocket messages"""
+        if message.get("type") == "trade":
+            formatted_data = {
+                "type": "price_update",
+                "symbol": message["data"][0]["s"],
+                "price": message["data"][0]["p"],
+                "timestamp": message["data"][0]["t"],
+                "volume": message["data"][0]["v"]
+            }
+            await self.broadcast(formatted_data)
     
     async def connect_client(self, websocket: WebSocket):
         await websocket.accept()
         self.clients.append(websocket)
     
     async def disconnect_client(self, websocket: WebSocket):
-        self.clients.remove(websocket)
-        await websocket.close()
+        if websocket in self.clients:
+            self.clients.remove(websocket)
     
     async def broadcast(self, message: dict):
         dead_clients = []
@@ -49,7 +60,7 @@ class MarketDataManager:
                 dead_clients.append(client)
         
         for client in dead_clients:
-            self.clients.remove(client)
+            await self.disconnect_client(client)
 
 market_manager = MarketDataManager()
 
@@ -105,6 +116,11 @@ async def market_data_stream(websocket: WebSocket):
 async def startup_event():
     app.state.alpha_vantage = AlphaVantageService()
     app.state.finnhub = FinnhubService()
+    
+    # Start WebSocket connection in background
+    asyncio.create_task(
+        app.state.finnhub.connect_websocket(market_manager.handle_finnhub_message)
+    )
 
 @app.get("/api/stock/{symbol}")
 async def get_stock_data(symbol: str, interval: str = "5min"):
@@ -167,6 +183,7 @@ async def search_stocks(
 ):
     """Search for stocks by name or symbol"""
     try:
+        
         if not query:
             raise HTTPException(status_code=400, detail="Search query is required")
             
@@ -311,4 +328,33 @@ async def get_company_news(
             status_code=500,
             detail=f"Failed to fetch company news: {str(e)}"
         )
+
+@app.websocket("/ws/live-prices")
+async def live_prices_websocket(
+    websocket: WebSocket,
+    symbols: str = Query(default="AAPL,MSFT,GOOGL")
+):
+    await market_manager.connect_client(websocket)
+    
+    # Subscribe to requested symbols
+    symbol_list = symbols.split(",")
+    for symbol in symbol_list:
+        await app.state.finnhub.subscribe_symbol(symbol)
+    
+    try:
+        while True:
+            # Keep connection alive and handle any client messages
+            data = await websocket.receive_text()
+            client_message = json.loads(data)
+            
+            # Handle subscribe/unsubscribe requests from client
+            if client_message.get("action") == "subscribe":
+                await app.state.finnhub.subscribe_symbol(client_message["symbol"])
+            elif client_message.get("action") == "unsubscribe":
+                await app.state.finnhub.unsubscribe_symbol(client_message["symbol"])
+                
+    except Exception as e:
+        print(f"WebSocket error: {e}")
+    finally:
+        await market_manager.disconnect_client(websocket)
 
