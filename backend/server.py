@@ -233,3 +233,28 @@ async def get_stocks(
             detail="Failed to fetch stock listings"
         )
 
+@app.get("/api/stock/{symbol}/intraday")
+async def get_intraday_data(
+    symbol: str,
+    interval: str = Query(
+        default="5min",
+        enum=["1min", "5min", "15min", "30min", "60min"]
+    )
+):
+    """Get intraday stock data with specified interval"""
+    try:
+        if not symbol:
+            raise HTTPException(status_code=400, detail="Symbol is required")
+        
+        data = await app.state.alpha_vantage.get_intraday_data(symbol, interval)
+        return data
+        
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        print(f"Error fetching intraday data: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to fetch intraday data"
+        )
+
