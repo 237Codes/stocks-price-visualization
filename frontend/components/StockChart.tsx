@@ -35,8 +35,8 @@ function StockChart({ symbol }: StockChartProps) {
 
   return (
     <Card className="mb-8 bg-white text-black" style={{ height: '65%', width: '100%' }}>
-      <CardContent style={{ height: '95%', width: '100%' }}>
-        <h2 className="text-2xl font-bold mb-4">{symbol} Stock Price</h2>
+      <CardContent style={{ height: '97%', width: '100%',paddingTop: '10px'}}>
+        {/* <h2 className="text-2xl font-bold mb-4">{symbol} Stock Price</h2> */}
         <div className="tradingview-widget-container" ref={container} style={{ height: '70vh', width: '100%' }}>
           <div className="tradingview-widget-container__widget" style={{ height: '100%', width: '100%' }}></div>
           <div className="tradingview-widget-copyright">
