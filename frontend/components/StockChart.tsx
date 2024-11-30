@@ -1,57 +1,53 @@
-'use client'
-
-import { useState, useEffect } from 'react'
-import { Card, CardContent } from '@/components/ui/card'
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
+import React, { useEffect, useRef, memo } from 'react';
+import { Card, CardContent } from '@/components/ui/card';
 
 interface StockChartProps {
-  symbol: string
+  symbol: string;
 }
 
-// Define the expected structure of 'values'
-interface TimeSeriesValues {
-  '4. close': string;
-}
-
-export default function StockChart({ symbol }: StockChartProps) {
-  const [data, setData] = useState<{ time: string; price: number }[]>([])
+function StockChart({ symbol }: StockChartProps) {
+  const container = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    fetchStockData()
-  }, [symbol])
-
-  const fetchStockData = async () => {
-    try {
-      const response = await fetch(`/api/stock/${symbol}/intraday?interval=5min`)
-      const result = await response.json()
-      const chartData = Object.entries(result['Time Series (5min)']).map(([time, values]) => {
-        const typedValues = values as TimeSeriesValues; // Type assertion
-        return {
-          time,
-          price: parseFloat(typedValues['4. close'] || '0'),
-        };
-      }).reverse()
-      setData(chartData)
-    } catch (error) {
-      console.error('Error fetching stock data:', error)
+    if (container.current) {
+      container.current.innerHTML = ''; // Clear previous widget
+      const script = document.createElement("script");
+      script.src = "https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js";
+      script.type = "text/javascript";
+      script.async = true;
+      script.innerHTML = `
+        {
+          "autosize": true,
+          "symbol": "${symbol}",
+          "interval": "D",
+          "timezone": "Etc/UTC",
+          "theme": "dark",
+          "style": "1",
+          "locale": "en",
+          "allow_symbol_change": true,
+          "hotlist": true,
+          "calendar": false,
+          "support_host": "https://www.tradingview.com"
+        }`;
+      container.current.appendChild(script);
     }
-  }
+  }, [symbol]);
 
   return (
-    <Card className="mb-8">
+    <Card className="mb-8 bg-black text-white">
       <CardContent>
         <h2 className="text-2xl font-bold mb-4">{symbol} Stock Price</h2>
-        <ResponsiveContainer width="100%" height={400}>
-          <LineChart data={data}>
-            <CartesianGrid strokeDasharray="3 3" />
-            <XAxis dataKey="time" />
-            <YAxis />
-            <Tooltip />
-            <Line type="monotone" dataKey="price" stroke="#8884d8" />
-          </LineChart>
-        </ResponsiveContainer>
+        <div className="tradingview-widget-container" ref={container} style={{ height: '70vh', width: '100%' }}>
+          <div className="tradingview-widget-container__widget" style={{ height: '100%', width: '100%' }}></div>
+          <div className="tradingview-widget-copyright">
+            <a href="https://www.tradingview.com/" rel="noopener nofollow" target="_blank">
+              <span className="blue-text">Track all markets on TradingView</span>
+            </a>
+          </div>
+        </div>
       </CardContent>
     </Card>
-  )
+  );
 }
 
+export default memo(StockChart);

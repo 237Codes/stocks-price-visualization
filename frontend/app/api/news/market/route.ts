@@ -10,7 +10,14 @@ export async function GET(request: Request) {
   try {
     const response = await fetch(url)
     const data = await response.json()
-    return NextResponse.json({ news: data })
+    const processedNews = data.map((item: any) => ({
+      headline: item.headline,
+      url: item.url,
+      image: item.image,
+      summary: item.summary,
+      datetime: item.datetime,
+    }))
+    return NextResponse.json({ news: processedNews })
   } catch (error) {
     console.error('Error fetching market news:', error)
     return NextResponse.json({ error: 'Failed to fetch market news' }, { status: 500 })
