@@ -25,60 +25,60 @@ class AlphaVantageService:
             await self.session.close()
             self.session = None
 
-    async def get_daily_data(self, symbol: str) -> Dict:
-        """Fetch daily stock data using aiohttp"""
-        if not self.session:
-            self.session = ClientSession()
+    # async def get_daily_data(self, symbol: str) -> Dict:
+    #     """Fetch daily stock data using aiohttp"""
+    #     if not self.session:
+    #         self.session = ClientSession()
 
-        try:
-            params = {
-                "function": "TIME_SERIES_DAILY",
-                "symbol": symbol,
-                "apikey": self.api_key
-            }
+    #     try:
+    #         params = {
+    #             "function": "TIME_SERIES_DAILY",
+    #             "symbol": symbol,
+    #             "apikey": self.api_key
+    #         }
             
-            async with self.session.get(self.BASE_URL, params=params, ssl=False) as response:
-                data = await response.json()
+    #         async with self.session.get(self.BASE_URL, params=params, ssl=False) as response:
+    #             data = await response.json()
                 
-                # Check for error responses
-                if "Error Message" in data:
-                    raise ValueError(data["Error Message"])
+    #             # Check for error responses
+    #             if "Error Message" in data:
+    #                 raise ValueError(data["Error Message"])
                 
-                if "Note" in data:
-                    raise ValueError(data["Note"])  # API limit message
+    #             if "Note" in data:
+    #                 raise ValueError(data["Note"])  # API limit message
                     
-                # Extract the time series data
-                time_series = data.get("Time Series (Daily)")
-                if not time_series:
-                    raise ValueError(f"No daily data found for symbol {symbol}")
+    #             # Extract the time series data
+    #             time_series = data.get("Time Series (Daily)")
+    #             if not time_series:
+    #                 raise ValueError(f"No daily data found for symbol {symbol}")
                 
-                # Convert the data into a more usable format
-                formatted_data = [
-                    {
-                        "date": date,
-                        "open": float(values["1. open"]),
-                        "high": float(values["2. high"]),
-                        "low": float(values["3. low"]),
-                        "close": float(values["4. close"]),
-                        "volume": int(values["5. volume"])
-                    }
-                    for date, values in time_series.items()
-                ]
+    #             # Convert the data into a more usable format
+    #             formatted_data = [
+    #                 {
+    #                     "date": date,
+    #                     "open": float(values["1. open"]),
+    #                     "high": float(values["2. high"]),
+    #                     "low": float(values["3. low"]),
+    #                     "close": float(values["4. close"]),
+    #                     "volume": int(values["5. volume"])
+    #                 }
+    #                 for date, values in time_series.items()
+    #             ]
                 
-                # Sort by date (most recent first)
-                formatted_data.sort(key=lambda x: x["date"], reverse=True)
+    #             # Sort by date (most recent first)
+    #             formatted_data.sort(key=lambda x: x["date"], reverse=True)
                 
-                return {
-                    "symbol": symbol,
-                    "data": formatted_data
-                }
+    #             return {
+    #                 "symbol": symbol,
+    #                 "data": formatted_data
+    #             }
                 
-        except Exception as e:
-            print(f"Error fetching data: {str(e)}")
-            raise HTTPException(
-                status_code=500,
-                detail=f"Failed to fetch data: {str(e)}"
-            )
+    #     except Exception as e:
+    #         print(f"Error fetching data: {str(e)}")
+    #         raise HTTPException(
+    #             status_code=500,
+    #             detail=f"Failed to fetch data: {str(e)}"
+    #         )
     
     async def search_symbols(self, keywords: str) -> List[Dict]:
         """Search for stock symbols using Alpha Vantage's SYMBOL_SEARCH endpoint"""
@@ -127,46 +127,46 @@ class AlphaVantageService:
             await self.session.close()
             self.session = None
     
-    async def get_stock_listings(self) -> Dict:
-        """Fetch list of active stocks from Alpha Vantage"""
-        if not self.session:
-            self.session = ClientSession()
+    # async def get_stock_listings(self) -> Dict:
+    #     """Fetch list of active stocks from Alpha Vantage"""
+    #     if not self.session:
+    #         self.session = ClientSession()
         
-        try:
-            params = {
-                "function": "LISTING_STATUS",
-                "apikey": self.api_key
-            }
+    #     try:
+    #         params = {
+    #             "function": "LISTING_STATUS",
+    #             "apikey": self.api_key
+    #         }
             
-            async with self.session.get(self.BASE_URL, params=params, ssl=False) as response:
-                data = await response.json()
+    #         async with self.session.get(self.BASE_URL, params=params, ssl=False) as response:
+    #             data = await response.json()
                 
-                if "Error Message" in data:
-                    raise ValueError(data["Error Message"])
+    #             if "Error Message" in data:
+    #                 raise ValueError(data["Error Message"])
                 
-                # Format the response to include only relevant fields
-                stocks = [
-                    {
-                        "symbol": item["symbol"],
-                        "name": item["name"],
-                        "exchange": item["exchange"],
-                        "assetType": item["assetType"],
-                        "status": item["status"]
-                    }
-                    for item in data
-                ]
+    #             # Format the response to include only relevant fields
+    #             stocks = [
+    #                 {
+    #                     "symbol": item["symbol"],
+    #                     "name": item["name"],
+    #                     "exchange": item["exchange"],
+    #                     "assetType": item["assetType"],
+    #                     "status": item["status"]
+    #                 }
+    #                 for item in data
+    #             ]
                 
-                return {
-                    "count": len(stocks),
-                    "stocks": stocks
-                }
+    #             return {
+    #                 "count": len(stocks),
+    #                 "stocks": stocks
+    #             }
                 
-        except Exception as e:
-            print(f"Error fetching stock listings: {str(e)}")
-            raise HTTPException(
-                status_code=500,
-                detail=f"Failed to fetch stock listings: {str(e)}"
-            )
+    #     except Exception as e:
+    #         print(f"Error fetching stock listings: {str(e)}")
+    #         raise HTTPException(
+    #             status_code=500,
+    #             detail=f"Failed to fetch stock listings: {str(e)}"
+    #         )
     
     async def get_intraday_data(self, symbol: str, interval: str = "5min") -> Dict:
         """
