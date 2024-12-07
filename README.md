@@ -1,6 +1,6 @@
 # stocks-price-visualization
 
-Start thye backiend after activating a virtual env
+Start the backend after activating a virtual env
 
 source venv/bin/activate
 
